@@ -91,7 +91,7 @@ impl Connection {
             .map_err(|err| ConnectorError::from_source(err, "external connector error"))
     }
 
-    async fn dispose(&self) -> ConnectorResult<()> {
+    async fn dispose(&mut self) -> ConnectorResult<()> {
         self.adapter.dispose().await.map_err(quaint_error_mapper(&Params))
     }
 }

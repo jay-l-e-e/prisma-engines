@@ -123,6 +123,7 @@ class QueryPipeline {
       transactionManager: qiTransactionManager,
       placeholderValues: {},
       onQuery: (event: QueryEvent) => {
+        debug('🟢 Query event: ', event)
         this.logs.push(bigIntSafeJsonStringify(event))
       },
       tracingHelper: noopTracingHelper,

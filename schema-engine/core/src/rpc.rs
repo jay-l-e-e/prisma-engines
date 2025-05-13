@@ -1,4 +1,4 @@
-use crate::{CoreError, CoreResult, GenericApi};
+use crate::{state::EngineState, CoreError, CoreResult, GenericApi};
 use json_rpc::method_names::*;
 use jsonrpc_core::{types::error::Error as JsonRpcError, IoHandler, Params};
 use psl::SourceFile;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 pub fn rpc_api(
     initial_datamodels: Option<Vec<(String, String)>>,
     host: Arc<dyn schema_connector::ConnectorHost>,
-) -> IoHandler {
+) -> (IoHandler, Arc<EngineState>) {
     let mut io_handler = IoHandler::default();
     let initial_datamodels = initial_datamodels.map(|schemas| {
         schemas
@@ -26,7 +26,7 @@ pub fn rpc_api(
         });
     }
 
-    io_handler
+    (io_handler, api)
 }
 
 #[allow(clippy::redundant_allocation)]

@@ -114,7 +114,9 @@ async fn start_engine(datamodel_locations: Option<Vec<String>>) {
     let (client, adapter) = json_rpc_stdio::new_client();
     let host = JsonRpcHost { client };
 
-    let api = rpc_api(datamodel_locations, Arc::new(host));
+    let (api, mut state) = rpc_api(datamodel_locations, Arc::new(host));
     // Block the thread and handle IO in async until EOF.
     json_rpc_stdio::run_with_client(&api, adapter).await.unwrap();
+
+    Arc::get_mut(&mut state).unwrap().dispose().await;
 }

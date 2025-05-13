@@ -43,7 +43,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
-use tokio::sync::OnceCell;
+use tokio::sync::{oneshot, OnceCell};
 use tokio_postgres::{config::ChannelBinding, Client, Config, Statement};
 use tracing_futures::WithSubscriber;
 use websocket::connect_via_websocket;
@@ -80,6 +80,7 @@ pub struct PostgreSql<Cache> {
     is_cockroachdb: bool,
     is_materialize: bool,
     db_system_name: &'static str,
+    closed: Option<oneshot::Receiver<()>>,
 }
 
 /// A [`PostgreSql`] interface with the default caching strategy, which involves storing all
@@ -233,7 +234,7 @@ impl PostgresNativeUrl {
 impl PostgreSqlWithNoCache {
     /// Create a new websocket connection to managed database
     pub async fn new_with_websocket(url: PostgresWebSocketUrl) -> crate::Result<Self> {
-        let client = connect_via_websocket(url).await?;
+        let (client, closed) = connect_via_websocket(url).await?;
 
         Ok(Self {
             client: PostgresClient(client),
@@ -244,6 +245,7 @@ impl PostgreSqlWithNoCache {
             is_cockroachdb: false,
             is_materialize: false,
             db_system_name: DB_SYSTEM_NAME_POSTGRESQL,
+            closed: Some(closed),
         })
     }
 }
@@ -258,12 +260,14 @@ impl<Cache: QueryCache> PostgreSql<Cache> {
 
         let is_cockroachdb = conn.parameter("crdb_version").is_some();
         let is_materialize = conn.parameter("mz_version").is_some();
+        let (close_snd, close_rcv) = oneshot::channel();
 
         tokio::spawn(
             conn.map(|r| {
                 if let Err(e) = r {
                     tracing::error!("Error in PostgreSQL connection: {e:?}");
                 }
+                close_snd.send(()).ok();
             })
             .with_current_subscriber()
             .with_current_recorder(),
@@ -304,6 +308,7 @@ impl<Cache: QueryCache> PostgreSql<Cache> {
             is_cockroachdb,
             is_materialize,
             db_system_name,
+            closed: Some(close_rcv),
         })
     }
 
@@ -494,6 +499,14 @@ impl<Cache: QueryCache> PostgreSql<Cache> {
             },
         )
         .await
+    }
+
+    pub async fn close(&mut self) {
+        self.client.0.__private_api_close();
+
+        if let Some(closed) = self.closed.take() {
+            closed.await.ok();
+        }
     }
 }
 

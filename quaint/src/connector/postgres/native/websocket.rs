@@ -13,6 +13,7 @@ use prisma_metrics::WithMetricsInstrumentation;
 use tokio::{
     io::{AsyncBufRead, AsyncRead, AsyncWrite, ReadBuf},
     net::TcpStream,
+    sync::oneshot,
 };
 use tokio_postgres::{Client, Config};
 use tokio_tungstenite::{
@@ -36,7 +37,7 @@ use crate::{
 const CONNECTION_PARAMS_HEADER: &str = "Prisma-Connection-Parameters";
 const HOST_HEADER: &str = "Prisma-Db-Host";
 
-pub(crate) async fn connect_via_websocket(url: PostgresWebSocketUrl) -> crate::Result<Client> {
+pub(crate) async fn connect_via_websocket(url: PostgresWebSocketUrl) -> crate::Result<(Client, oneshot::Receiver<()>)> {
     let db_name = url.overriden_db_name().map(ToOwned::to_owned);
     let (ws_stream, response) = connect_async(url).await?;
 
@@ -52,18 +53,21 @@ pub(crate) async fn connect_via_websocket(url: PostgresWebSocketUrl) -> crate::R
     let tls = TlsConnector::new(native_tls::TlsConnector::new()?, db_host);
     let (client, connection) = config.connect_raw(ws_byte_stream, tls).await?;
 
+    let (close_snd, close_rcv) = oneshot::channel();
+
     tokio::spawn(
         connection
             .map(move |result| {
                 if let Err(err) = result {
                     tracing::error!("Error in PostgreSQL WebSocket connection: {err:?}");
                 }
+                close_snd.send(()).ok();
             })
             .with_current_subscriber()
             .with_current_recorder(),
     );
 
-    Ok(client)
+    Ok((client, close_rcv))
 }
 
 fn require_header_value<'a>(headers: &'a HeaderMap, name: &str) -> crate::Result<&'a str> {

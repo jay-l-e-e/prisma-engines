@@ -129,7 +129,7 @@ impl Connection {
             .map_err(convert_error)
     }
 
-    async fn dispose(&self) -> ConnectorResult<()> {
+    async fn dispose(&mut self) -> ConnectorResult<()> {
         self.adapter.dispose().await.map_err(convert_error)
     }
 }

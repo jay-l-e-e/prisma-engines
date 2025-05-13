@@ -147,7 +147,10 @@ async fn sql_schema_from_migration_history_for_local_ppg(
 
     let connector_params = ConnectorParams::new(shadow_db_url.to_string(), preview_features, None);
     let mut shadow_database = PostgresConnector::new_with_params(connector_params)?;
-    sql_schema_from_migration_history_for_external_db(&mut shadow_database, migrations, namespaces).await
+    let result = sql_schema_from_migration_history_for_external_db(&mut shadow_database, migrations, namespaces).await;
+    shadow_database.dispose().await.ok();
+
+    result
 }
 
 /// Drop a database using `WITH (FORCE)` syntax.

@@ -336,8 +336,11 @@ pub fn get_shadow_db_url(state: &State) -> Option<&str> {
         .as_deref()
 }
 
-pub async fn dispose(_state: &State) -> ConnectorResult<()> {
-    // Nothing to on dispose, the connection is disposed in Drop
+pub async fn dispose(state: &mut State) -> ConnectorResult<()> {
+    if let crate::flavour::State::Connected(_, (_, Connection(conn))) = state {
+        conn.close().await
+    }
+
     Ok(())
 }
 
